@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 import sqlite3
-import os
+import subprocess
+import re
 
 app = Flask(__name__)
 
@@ -44,14 +45,29 @@ def get_user(username):
     else:
         return jsonify({"error": "User not found"}), 404
 
-# VULNERABILITY 2: Command Injection
-# Using os.system with user input
 @app.route('/ping')
 def ping():
     host = request.args.get('host', '127.0.0.1')
-    # VULNERABLE: Command injection through os.system
-    result = os.system(f"ping -c 1 {host}")
-    return jsonify({"message": f"Ping to {host} completed", "exit_code": result})
+    
+    if not re.match(r'^[a-zA-Z0-9.-]+$', host):
+        return jsonify({"error": "Invalid host format"}), 400
+    
+    try:
+        result = subprocess.run(
+            ['ping', '-c', '1', host],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        return jsonify({
+            "message": f"Ping to {host} completed",
+            "exit_code": result.returncode,
+            "output": result.stdout
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Ping timeout"}), 408
+    except Exception as e:
+        return jsonify({"error": "Ping failed"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
