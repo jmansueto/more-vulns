@@ -1,0 +1,57 @@
+name: CodeQL Security Analysis
+
+on:
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    name: Analyze Python Code
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+      security-events: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          queries: security-extended
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"
+          output: sarif-results
+          upload: false
+
+      - name: Upload SARIF results as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-results
+          path: sarif-results/python.sarif
+          retention-days: 30
+
+      - name: Create results directory
+        run: |
+          mkdir -p codeql-results
+          cp sarif-results/python.sarif codeql-results/results-${{ github.run_id }}.sarif
+
+      - name: Commit CodeQL results to repository
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add codeql-results/
+          git diff --staged --quiet || git commit -m "Add CodeQL analysis results from run ${{ github.run_id }}"
+          git push origin HEAD || echo "No changes to push or push failed"
+        continue-on-error: true
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: sarif-results/python.sarif
+        continue-on-error: true
